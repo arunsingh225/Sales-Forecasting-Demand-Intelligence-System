@@ -343,7 +343,7 @@ elif page == "🔮 Forecast Explorer":
         horizon = st.slider("Months Ahead", min_value=1, max_value=3, value=3)
 
     if not sel_cats or not sel_regs:
-        st.warning("⚠️ Kam se kam ek Category aur ek Region select karo.")
+        st.warning("⚠️ Select at least one Category and one Region to continue.")
         st.stop()
 
     filt = df[df['Category'].isin(sel_cats) & df['Region'].isin(sel_regs)]
@@ -516,37 +516,83 @@ elif page == "🗂️ Product Segments":
 
     st.markdown("---")
     st.markdown("### 🔵 Demand Cluster Map (PCA View)")
+
+    import plotly.graph_objects as go
+
     colors_map = {
         'High Volume, Stable Demand'  : '#2ecc71',
         'Low Volume, High Volatility' : '#e74c3c',
         'Growing Demand'              : '#3498db',
         'Declining Demand'            : '#f39c12'
     }
-    fig, ax = plt.subplots(figsize=(13, 8))
+
+    _pos_cycle = {}
+    def get_textpos(pca1, pca2, key):
+        if pca1 >= 0 and pca2 >= 0:
+            opts = ['top right', 'middle right', 'top center']
+        elif pca1 >= 0 and pca2 < 0:
+            opts = ['bottom right', 'middle right', 'bottom center']
+        elif pca1 < 0 and pca2 >= 0:
+            opts = ['top left', 'middle left', 'top center']
+        else:
+            opts = ['bottom left', 'middle left', 'bottom center']
+        _pos_cycle[key] = _pos_cycle.get(key, -1) + 1
+        return opts[_pos_cycle[key] % len(opts)]
+
+    fig_pca = go.Figure()
+
     for label, group in feat_df.groupby('Cluster_Label'):
-        ax.scatter(group['PCA1'], group['PCA2'], label=label,
-                   color=colors_map.get(label, '#95a5a6'),
-                   s=150, alpha=0.85, edgecolor='black', zorder=3)
-        for _, row in group.iterrows():
-            x_off = 0.12 if row['PCA1'] >= 0 else -0.12
-            y_off = 0.12 if row['PCA2'] >= 0 else -0.12
-            ax.annotate(row['Sub-Category'],
-                        xy=(row['PCA1'], row['PCA2']),
-                        xytext=(row['PCA1']+x_off, row['PCA2']+y_off),
-                        fontsize=9, color='#2c3e50',
-                        arrowprops=dict(arrowstyle='-', color='gray', lw=0.6),
-                        bbox=dict(boxstyle='round,pad=0.2',
-                                  fc='white', alpha=0.6, ec='none'))
-    ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)",
-                  fontsize=11)
-    ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)",
-                  fontsize=11)
-    ax.set_title('Product Demand Segmentation — PCA View',
-                 fontsize=14, fontweight='bold')
-    ax.legend(loc='upper right', fontsize=10)
-    ax.axhline(0, color='gray', lw=0.5, ls='--', alpha=0.5)
-    ax.axvline(0, color='gray', lw=0.5, ls='--', alpha=0.5)
-    plt.tight_layout(); st.pyplot(fig); plt.close()
+        fig_pca.add_trace(go.Scatter(
+            x=group['PCA1'],
+            y=group['PCA2'],
+            mode='markers+text',
+            name=label,
+            text=group['Sub-Category'],
+            textposition=[get_textpos(r['PCA1'], r['PCA2'], f"{label}-{idx}")
+                          for idx, r in group.iterrows()],
+            textfont=dict(size=9, color='#2c3e50'),
+            marker=dict(
+                color=colors_map.get(label, '#95a5a6'),
+                size=12,
+                line=dict(color='black', width=1),
+                opacity=0.85
+            ),
+            hovertemplate=(
+                "<b>%{text}</b><br>"
+                "PC1: %{x:.2f}<br>"
+                "PC2: %{y:.2f}<br>"
+                f"Cluster: {label}<extra></extra>"
+            )
+        ))
+
+    fig_pca.add_hline(y=0, line_dash='dot', line_color='gray',
+                      line_width=0.8, opacity=0.5)
+    fig_pca.add_vline(x=0, line_dash='dot', line_color='gray',
+                      line_width=0.8, opacity=0.5)
+
+    fig_pca.update_layout(
+        title=dict(
+            text='Product Demand Segmentation — PCA View',
+            font=dict(size=15, color='#1a1a1a'), x=0.5
+        ),
+        xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)",
+        yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)",
+        height=580,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        legend=dict(
+            yanchor='top', y=0.99,
+            xanchor='right', x=0.99,
+            bgcolor='rgba(255,255,255,0.85)',
+            bordercolor='#cccccc', borderwidth=1,
+            font=dict(color='#1a1a1a', size=11)
+        ),
+        xaxis=dict(showgrid=True, gridcolor='#f0f0f0', zeroline=False),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', zeroline=False),
+        margin=dict(l=60, r=40, t=60, b=60)
+    )
+
+    st.plotly_chart(fig_pca, use_container_width=True)
 
     st.markdown("---")
     st.markdown("### 📋 Sub-Category Assignments")
