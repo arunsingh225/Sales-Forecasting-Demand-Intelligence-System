@@ -9,4 +9,3 @@ scikit-learn
 streamlit
 plotly
 seaborn
-adjustText
